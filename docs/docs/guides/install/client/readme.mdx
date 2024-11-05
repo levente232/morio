@@ -1,0 +1,62 @@
+---
+title: Morio Client Installation Guide
+sidebar_label: Client Install Guide
+---
+
+This guide covers the installation of the Morio client.
+The process is a little different on each platform:
+
+- [Installing the Morio client on Linux](#linux)
+- [Installing the Morio client on MacOS](#macos)
+- [Installing the Morio client on Windows](#windows)
+
+However, for all of these the same principle applies:
+
+- A preconfigured version of the client can be downloaded from your Morio
+  instance
+- A so-called _bare_ version of the client can be downloaded from the
+  repositories provided by the Morio team
+
+Unless there is a specific reason why you need the _bare_ client, you should use
+the client packages made available by your Morio instance.
+
+:::warning The bare client is not available yet
+We do currently not (yet) publish a bare client, but it's on our todo list
+:::
+
+Once installed, refer to [the client configuration
+guide](/docs/guides/settings/client/) for info on how to configure the client.
+
+## Installing the Morio client on Linux {#linux}
+
+### Pre-configured client from a Morio instance
+
+To install the Morio client, run the command below from an account with `sudo`
+rights, making sure to replace `example.morio.it` with the _FQDN_ of your Morio
+collector:
+
+```sh
+curl -k https://example.morio.it/install/ | bash
+```
+
+### Bare Morio client
+
+Download the bare client package suitable for your distribution:
+
+- APT package: FIXME
+- DEB package: FIXME 
+
+Install the package.
+
+
+## Installing the Morio client on MacOS  <!-- skip-spellcheck --> {#macos}
+
+:::warning FIXME
+Write these docs
+:::
+
+## Installing the Morio client on Windows {#windows}
+
+:::warning FIXME
+Write these docs
+:::
