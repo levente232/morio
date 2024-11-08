@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- [api] Implemented the various `DISABLE_IDP_[type]` feature flags
+- [ui] Added feature flag settings to the UI
+
+### Removed
+
+- We have discontinued support for AMI images and have removed the related documentation, configurations, and tools.
+
 ## [0.5.0] - 2024-10-25
 
 Since this is a minor release, here's what's new since 0.4.0:
