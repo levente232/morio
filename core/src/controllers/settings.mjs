@@ -1,6 +1,6 @@
 import { resolveHostAsIp } from '#shared/network'
 import { setIfUnset } from '#shared/store'
-import { writeYamlFile, writeJsonFile, readJsonFile } from '#shared/fs'
+import { writeJsonFile } from '#shared/fs'
 import {
   encryptionMethods,
   generateJwtKey,
@@ -8,16 +8,16 @@ import {
   generateGpgKeyPair,
   hash,
   hashPassword,
-  randomString,
   uuid,
 } from '#shared/crypto'
 import { reload } from '../index.mjs'
 import { cloneAsPojo } from '#shared/utils'
 import { log, utils } from '../lib/utils.mjs'
 import { generateCaConfig } from '../lib/services/ca.mjs'
-import { unsealKeyData } from '../lib/services/core.mjs'
+import { unsealKeyData, loadKeysFromDisk } from '../lib/services/core.mjs'
 import { resolveServiceConfiguration } from '#config'
 import { loadPreseededSettings, ensurePreseededContent } from '#shared/loaders'
+import { generateKeySeal, generateRootToken, formatRootTokenResponseData } from '../lib/crypto.mjs'
 
 /**
  * This settings controller handles settings routes
@@ -206,7 +206,7 @@ Controller.prototype.reseed = async function (req, res) {
    * not include a base entry, for example to update the list
    * of client templates. So we need to differentiate here.
    */
-  const preseedSettings = utils.getSettings('preseed')
+  const preseedSettings = utils.getSettings('preseed', {})
   if (preseedSettings.base) {
     /*
      * Load the preseeded settings
@@ -243,7 +243,7 @@ Controller.prototype.exportKeys = async function (req, res) {
   /*
    * Load the raw key data from disk
    */
-  const keys = await readJsonFile(`/etc/morio/keys.json`)
+  const { keys } = await loadKeysFromDisk()
 
   return res.send({ keys })
 }
@@ -316,10 +316,10 @@ const initialSetup = async function (req, settings) {
   utils.beginReload()
 
   /*
-   * Generate time-stamp for use in file names
+   * Generate serial for use in file names
    */
-  const time = Date.now()
-  log.debug(`Initial settings will be tracked as: ${time}`)
+  const serial = Date.now()
+  log.debug(`Initial settings will be tracked as: ${serial}`)
 
   /*
    * This is the initial deploy, generate keys, UUIDS and so on
@@ -338,7 +338,7 @@ const initialSetup = async function (req, settings) {
   /*
    * Fenerate the seal secret unless it was provided in the preseeded key data
    */
-  if (!keys.seal) keys.seal = await hashPassword(randomString(64))
+  if (!keys.seal) keys.seal = await generateKeySeal()
 
   /*
    * Generate the Morio root token, unless it was provided in the preseeded key data
@@ -346,9 +346,15 @@ const initialSetup = async function (req, settings) {
   let morioRootToken = 'Use the preseeded root token'
   if (!keys.mrt) {
     log.debug(`Generating root token`)
-    morioRootToken = 'mrt.' + (await randomString(32))
+    morioRootToken = await generateRootToken()
     keys.mrt = hashPassword(morioRootToken)
   }
+
+  /*
+   * We need a serial for the mrt since it can be rotated
+   * By default, we keep it the same as the settings serial
+   */
+  keys.mrt_serial = serial
 
   /*
    * Now generate the key pair, unless it was provided in the preseeded key data
@@ -418,8 +424,8 @@ const initialSetup = async function (req, settings) {
   /*
    * Write the settings to disk
    */
-  log.debug(`Writing initial settings to settings.${time}.yaml`)
-  let result = await writeYamlFile(`/etc/morio/settings.${time}.yaml`, saveSettings)
+  log.debug(`Writing initial settings to settings.${serial}.json`)
+  let result = await writeJsonFile(`/etc/morio/settings.${serial}.json`, saveSettings)
   if (!result) return [false, ['morio.core.fs.write.failed']]
 
   /*
@@ -432,7 +438,7 @@ const initialSetup = async function (req, settings) {
     key: keys.private,
     seal: keys.seal,
   }
-  result = await writeJsonFile(`/etc/morio/keys.json`, keydata, log, 0o600)
+  result = await writeJsonFile(`/etc/morio/keys.${serial}.json`, keydata, log, 0o600)
   if (!result) return [false, ['morio.core.fs.write.failed']]
 
   /*
@@ -458,11 +464,7 @@ const initialSetup = async function (req, settings) {
               'This Morio instance was preseeded with Key Data. No new Morio root token was generated. Use the preceeded root token instead.',
             value: morioRootToken,
           }
-        : {
-            about:
-              'This is the Morio root token. You can use it to authenticate before any authentication providers have been set up. Store it in a safe space, as it will never be shown again.',
-            value: morioRootToken,
-          },
+        : formatRootTokenResponseData(morioRootToken),
     },
     false,
   ]
@@ -470,10 +472,10 @@ const initialSetup = async function (req, settings) {
 
 const deployNewSettings = async function (settings) {
   /*
-   * Generate time-stamp for use in file names
+   * Generate serial for use in file names
    */
-  const time = Date.now()
-  log.info(`New settings will be tracked as: ${time}`)
+  const serial = Date.now()
+  log.info(`New settings will be tracked as: ${serial}`)
 
   /*
    * Handle secrets
@@ -484,8 +486,8 @@ const deployNewSettings = async function (settings) {
   /*
    * Write the protected settings to disk
    */
-  log.debug(`Writing new settings to settings.${time}.yaml`)
-  const result = await writeYamlFile(`/etc/morio/settings.${time}.yaml`, settings)
+  log.debug(`Writing new settings to settings.${serial}.json`)
+  const result = await writeJsonFile(`/etc/morio/settings.${serial}.json`, settings)
 
   return result
 }

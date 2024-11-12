@@ -6,6 +6,8 @@ import { errors } from '../errors.mjs'
 import { loadAllPresets } from '#config'
 import { validate as validateMethod } from '../schema.mjs'
 import { vaultGetSecret } from './vault.mjs'
+import { db } from './db.mjs'
+import { kv as kvClient } from '#shared/kv'
 
 /*
  * Export a log object for logging via the logger
@@ -48,7 +50,11 @@ store.presets = loadAllPresets()
 /*
  * Export an utils object to hold utility methods
  */
-export const utils = { hooks: { services: {} } }
+export const utils = {
+  db,
+  kv: kvClient(db, log),
+  hooks: { services: {} },
+}
 
 /*           _   _
  *  __ _ ___| |_| |_ ___ _ _ ___
@@ -274,6 +280,15 @@ utils.getInternalServiceCn = (service) =>
  * @return {object} keys - The keys configuration as loaded from disk
  */
 utils.getKeys = () => store.get('config.keys')
+
+/**
+ * Helper method to get the keys_serial
+ *
+ * See setKeysSerial for more info
+ *
+ * @return {number} serial - The keys serial
+ */
+utils.getKeysSerial = () => store.get('state.keys_serial')
 
 /**
  * Helper method to get the node_serial of the leading node
@@ -678,6 +693,39 @@ utils.setHooks = (serviceName, hooks) => {
  */
 utils.setKeys = (keys) => {
   store.set('config.keys', keys)
+  return utils
+}
+
+/**
+ * Helper method to store the serial for the keys data on disk
+ *
+ * This matters because there are two main chunks for data that we need
+ * to keep in sync between cluster nodes:
+ *  - The settings, here we use the settings serial to indidate a change
+ *  - They keys, here we use the hash of the JSON.stirngified data on disk
+ *
+ *  Cluster hearbeat includes the settings serial and keys serial, allowing
+ *  nodes to detect any updates. This means we do not need any custom logic
+ *  when (for example) rotating the morio root token. It will change the
+ *  keys serial and on the next cluster heartbeat, this change will cause the
+ *  other nodes to re-sync.
+ *
+ * @param {number|bool} hash - The hash of the keys data on disk
+ * @return {object} utils - The utils instance, making this method chainable
+ */
+utils.setKeysSerial = (serial) => {
+  store.set('state.keys_serial', serial)
+  return utils
+}
+
+/**
+ * Helper method to store a new Morio Root Token
+ *
+ * @param {string} mrtHash - The password hash of the new Morio root token
+ * @return {object} utils - The utils instance, making this method chainable
+ */
+utils.setKeysMrt = (mrtHash) => {
+  store.set('config.keys.mrt', mrtHash)
   return utils
 }
 

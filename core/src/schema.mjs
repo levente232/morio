@@ -6,6 +6,8 @@ import {
   jsTime,
   uuid,
   keys,
+  keysFile,
+  mrt,
   version,
   nodeSerial,
   settings,
@@ -34,6 +36,7 @@ export const schema = {
       }),
       version: version.required(),
       settings_serial: jsTime.required(),
+      keys_serial: jsTime.required(),
       status: Joi.object(), // TODO: Make this more detailed
       nodes: Joi.object(), // TODO: Make this more detailed
       broadcast: Joi.bool().required(),
@@ -50,8 +53,23 @@ export const schema = {
       serial: jsTime.required(),
       data: settings,
     }),
-    keys,
+    keys: {
+      serial: jsTime.required(),
+      data: keysFile,
+    },
     headers: Joi.object(),
+  }),
+  'req.cluster.sync': Joi.object({
+    data: Joi.object({
+      from: Joi.object({
+        fqdn: fqdn.required(),
+        uuid: uuid.required(),
+        serial: nodeSerial.required(),
+        settings_serial: jsTime.required(),
+        keys_serial: jsTime.required(),
+      }),
+    }),
+    checksum: Joi.string().required(),
   }),
   'req.docker.pull': Joi.object({ tag: id }),
   'req.docker.container.id': Joi.object({ id }),
@@ -102,9 +120,15 @@ export const schema = {
     iv: Joi.string().required(),
     ct: Joi.string().required(),
   }),
+  'req.rotate.mrt': Joi.object({ mrt }),
+
   /*
    * Responses
    */
+  'res.cluster.join': Joi.object({
+    cluster: uuid.required(),
+    node: uuid.required(),
+  }),
   'res.cluster.heartbeat': Joi.object({
     data: Joi.object({
       cluster: uuid.required(),
@@ -119,6 +143,15 @@ export const schema = {
         settings,
         serial: jsTime.required(),
       }),
+    }),
+    checksum: Joi.string().required(),
+  }),
+  'res.cluster.sync': Joi.object({
+    data: Joi.object({
+      keys: keysFile.required(),
+      settings,
+      settings_serial: jsTime.required(),
+      keys_serial: jsTime.required(),
     }),
     checksum: Joi.string().required(),
   }),

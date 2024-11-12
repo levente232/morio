@@ -66,30 +66,49 @@ const mrt = Joi.string()
   .pattern(/^mrt\.[0-9a-z]+$/)
 
 /*
- * The contents of the keys file/object
+ * The hash of any password or secret is structured like this
+ */
+const passwordHash = Joi.object({
+  hash: Joi.string(),
+  salt: Joi.string(),
+})
+
+/*
+ * The contents of the keys object
  */
 const keys = Joi.object({
-  jwt: Joi.string().required(),
-  mrt: Joi.string()
-    .length(68, 'utf8')
-    .pattern(/^mrt\.[0-9a-z]+$/)
-    .required(),
-  public: Joi.string().required(),
-  private: Joi.string().required(),
   cluster: uuid.required(),
+  icrt: Joi.string().required(),
+  ikey: Joi.string().required(),
   jwk: Joi.object({
     kty: Joi.string().required(),
     kid: Joi.string().required(),
     n: Joi.string().required(),
     e: Joi.string().required(),
   }),
-  rfpr: Joi.string().base64().required(),
+  jwt: Joi.string().required(),
+  mrt: passwordHash.required(),
+  pgpriv: Joi.string().required(),
+  pgpub: Joi.string().required(),
+  private: Joi.string().required(),
+  public: Joi.string().required(),
   rcrt: Joi.string().required(),
+  rfpr: Joi.string().base64().required(),
   rkey: Joi.string().required(),
   rpwd: Joi.string().required(),
-  icrt: Joi.string().required(),
-  ikey: Joi.string().required(),
+  seal: passwordHash.required(),
+  unseal: Joi.string().required(),
 })
+
+/*
+ * The contents of the keys object
+ */
+const keysFile = Joi.object({
+  data: Joi.string().required(),
+  key: Joi.string().required(),
+  seal: passwordHash.required(),
+})
+
 
 /*
  * A vault secret
@@ -267,4 +286,4 @@ async function validate(key, input, schema) {
 /*
  * Named exports
  */
-export { Joi, validate, id, fqdn, jsTime, uuid, keys, mrt, version, nodeSerial, settings, preseed }
+export { Joi, validate, id, fqdn, jsTime, uuid, keys, keysFile,  mrt, passwordHash, version, nodeSerial, settings, preseed }

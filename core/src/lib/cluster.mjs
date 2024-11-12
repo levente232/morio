@@ -7,7 +7,14 @@ import { serviceOrder, ephemeralServiceOrder, optionalServices } from '#config'
 import { ensureMorioNetwork, runHook } from './services/index.mjs'
 import { isBrokerLeading } from './services/broker.mjs'
 import { log, utils } from './utils.mjs'
-import { dataWithChecksum, validDataWithChecksum } from './services/core.mjs'
+import {
+  dataWithChecksum,
+  validDataWithChecksum,
+  loadClusterDataFromDisk,
+} from './services/core.mjs'
+import { validate } from '#lib/validation'
+import { reload } from '../index.mjs'
+import { writeJsonFile } from '#shared/fs'
 
 /*
  * Helper method to update the cluster state
@@ -235,7 +242,7 @@ async function sendHeartbeat(fqdn, broadcast = false, justOnce = false) {
    * If fqdn is not a thing, don't bother
    */
   if (!fqdn) {
-    log.warn(`Cannot send heartbeat to ${fqdn}`)
+    log.warn(`Cannot send heartbeat to an FQDN that is falsy`)
     return
   }
 
@@ -262,6 +269,7 @@ async function sendHeartbeat(fqdn, broadcast = false, justOnce = false) {
         },
         version: utils.getVersion(),
         settings_serial: Number(utils.getSettingsSerial()),
+        keys_serial: Number(utils.getKeysSerial()),
         status: utils.getStatus(),
         nodes: utils.getClusterNodes(),
         broadcast,
@@ -342,21 +350,29 @@ function verifyHeartbeatResponse({ fqdn, data, rtt = 0, error = false }) {
       if (error.code === 'ECONNREFUSED') {
         log.warn(`Connection refused when sending heartbeat to ${fqdn}. Is this node up?`)
       } else {
-        log.warn(error, `Unspecified error when sending heartbeat to node ${fqdn}.`)
+        log.warn(`Unspecified error when sending heartbeat to node ${fqdn}.`)
+        if (typeof data === 'object') {
+          log.todo(Object.keys(data), 'Data keys in verifyHeartbeatResponse')
+          if (data.message) log.todo(data.message)
+        }
       }
     }
 
     return
+  } else if (data.status && data.status === 209) {
+    /*
+     * If the node is busy, we just try again later
+     */
   } else if (data.data && data.checksum) {
     if (validDataWithChecksum(data)) data = data.data
-    else log.warn(data, `Heartbeat checksum failure`)
+    else log.warn(`Heartbeat checksum failure`)
   } else {
     /*
      * It is normal for nodes to not be able to properly sign/checksum the heartbeats
      * when the cluster just came up, since they may not have the required data yet
-     * So below 1 minute of uptime, let's swallow these warnings
+     * So below 1.5 minute of uptime, let's swallow these warnings
      */
-    if (utils.getUptime() > 60) log.warn(`Received an invalid heartbeat response`)
+    if (utils.getUptime() > 90) log.warn(`Received an invalid heartbeat response`)
   }
 
   /*
@@ -365,7 +381,7 @@ function verifyHeartbeatResponse({ fqdn, data, rtt = 0, error = false }) {
   if (Array.isArray(data?.errors) && data.errors.length > 0) {
     utils.setHeartbeatIn(fqdn, { up: true, ok: false, data })
     for (const err of data.errors) {
-      log.warn(`Heartbeat error from ${fqdn}: ${err}`)
+      log.warn(`Irregular heartbeat error from ${fqdn}: ${err}`)
     }
   } else {
     utils.setHeartbeatIn(fqdn, { up: true, ok: true, data })
@@ -382,8 +398,10 @@ function verifyHeartbeatResponse({ fqdn, data, rtt = 0, error = false }) {
    * Do we need to take any action?
    */
   if (data?.action) {
-    if (data.action === 'INVITE') inviteClusterNode(fqdn)
-    if (data.action === 'LEADER_CHANGE') log.todo('Implement LEADER_CHANGE')
+    if (data.action === 'SYNC') pullClusterData(fqdn)
+    else if (data.action === 'INVITE') inviteClusterNode(fqdn)
+    else if (data.action === 'LEADER_CHANGE') log.todo('Implement LEADER_CHANGE')
+    else log.todo(`Unsupported action in heartbeat response: ${data.action}`)
   } else if (Array.isArray(data?.nodes)) {
     for (const uuid in data.nodes) {
       /*
@@ -452,13 +470,33 @@ export async function verifyHeartbeatRequest(data, type = 'heartbeat') {
 
   /*
    * Verify settings_serial
-   * If there's a mismatch, ask to re-sync the cluster.
+   * If there's a mismatch, we need to sync the most recent settings,
+   * which are the ones with the highest serial.
    */
   if (data.settings_serial !== utils.getSettingsSerial()) {
-    const err = 'SETTINGS_SERIAL_MISMATCH'
-    errors.push(err)
-    action = 'SYNC'
-    log.debug(`Settings serial mismatch in ${type} from ${data.from.fqdn}: ${err}`)
+    errors.push('SETTINGS_SERIAL_MISMATCH')
+    if (Number(data.settings_serial) > Number(utils.getSettingsSerial())) {
+      action = 'START_SYNC'
+      log.debug(`Settings serial is ahead in ${type} from ${data.from.fqdn}. Will start sync.`)
+    } else {
+      action = 'SYNC'
+      log.debug(`Settings serial is behind in ${type} from ${data.from.fqdn}. Asking to sync.`)
+    }
+  }
+
+  /*
+   * Verify keys_serial
+   * If there's a mismatch, ask to re-sync the cluster.
+   */
+  if (data.keys_serial !== utils.getKeysSerial()) {
+    errors.push('KEYS_SERIAL_MISMATCH')
+    if (Number(data.keys_serial) > Number(utils.getKeysSerial())) {
+      action = 'START_SYNC'
+      log.debug(`Keys serial is ahead in ${type} from ${data.from.fqdn}. Will start sync.`)
+    } else {
+      action = 'SYNC'
+      log.debug(`Keys serial is behind in ${type} from ${data.from.fqdn}. Will ask to sync.`)
+    }
   }
 
   /*
@@ -588,7 +626,6 @@ export async function inviteClusterNode(remote) {
    * prevents us from having to run this in the background.
    */
   const opportunisticJoin = await inviteClusterNodeAttempt(remote)
-  //const opportunisticJoin = false
 
   /*
    * If that didn't work, keep trying, but don't block the request
@@ -617,6 +654,17 @@ async function inviteClusterNodeAttempt(remote) {
   log.debug(`Inviting ${remote} to join the cluster`)
   const flanking = utils.isThisAFlankingNode({ fqdn: remote })
 
+  /*
+   * Load data from disk becauise what we sync between cluster nodes
+   * is what is written to disk.
+   */
+  const timestamp = utils.getSettingsSerial()
+  if (!timestamp)
+    log.err(
+      'Unable to load timestamp. This is unexpected and may impact cluster formation. Will try anyway.'
+    )
+  const clusterData = await loadClusterDataFromDisk(timestamp)
+
   const result = await testUrl(`https://${remote}/-/core/cluster/join`, {
     method: 'POST',
     data: {
@@ -626,20 +674,76 @@ async function inviteClusterNodeAttempt(remote) {
       cluster: utils.getClusterUuid(),
       settings: {
         serial: Number(utils.getSettingsSerial()),
-        data: utils.getSanitizedSettings(),
+        data: clusterData.settings,
       },
-      keys: utils.getKeys(),
+      keys: {
+        serial: Number(utils.getKeysSerial()),
+        data: clusterData.keys,
+      },
     },
     ignoreCertificate: true,
     timeout: Number(utils.getPreset('MORIO_CORE_CLUSTER_HEARTBEAT_INTERVAL')) * 900, // *0.9 * 1000 to go from ms to s
     returnAs: 'json',
     returnError: true,
   })
-  if (result) {
-    log.info(`Node ${result.node} will join the cluster`)
-    return true
-  } else {
-    log.todo('Handle cluster join failure')
-    return false
+
+  /*
+   * Validate response
+   */
+  const [valid, err] = await validate(`res.cluster.join`, result)
+  if (valid) log.info(`Node ${valid.node} will join the cluster`)
+  else log.todo(err, `Handle cluster join failure.`)
+
+  return valid ? true : false
+}
+
+export async function pullClusterData(remote) {
+  log.debug(`Pulling cluster data from ${remote}`)
+
+  const result = await testUrl(`https://${remote}/-/core/cluster/sync`, {
+    method: 'POST',
+    data: dataWithChecksum({
+      from: {
+        fqdn: utils.getNodeFqdn(),
+        serial: Number(utils.getNodeSerial()),
+        uuid: utils.getNodeUuid(),
+        keys_serial: Number(utils.getKeysSerial()),
+        settings_serial: Number(utils.getSettingsSerial()),
+      },
+    }),
+    ignoreCertificate: true,
+    timeout: 5000,
+    returnAs: 'json',
+    returnError: true,
+  })
+
+  /*
+   * Validate response
+   */
+  const [valid, err] = await validate(`res.cluster.sync`, result)
+  if (!valid) log.error(err, `Invalid sync response, discarding update`)
+  else {
+    log.info(`Updating cluster config from sync result`)
+    log.debug(`Writing updated key data to morio.keys`)
+    let written = false
+    try {
+      await writeJsonFile(
+        `/etc/morio/keys.${result.data.keys_serial}.json`,
+        result.data.keys,
+        log,
+        0o600
+      )
+      await writeJsonFile(
+        `/etc/morio/settings.${result.data.settings_serial}.json`,
+        result.data.settings,
+        log,
+        0o600
+      )
+      written = true
+    } catch (err) {
+      log.error(err, `Failed to write synced data to disk`)
+    }
+
+    if (written) reload()
   }
 }
