@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2024-11-13
+
+### Fixed
+
+- [api] Fix incorrect key property when creating JWT in OIDC identity provider
+- [core] Do not assume preseed.base is a string, handle objects too
+
+### Removed
+
+- [api] We no longer have a dedicated `/preseed` endpoint, use the `/setup` endpoint instead
+- [api] We no longer have a dedicated `/validate/preseed` endpoint, use the `/validate/settings` endpoint instead
+- [core] We no longer have a dedicated `/preseed` endpoint, use the `/setup` endpoint instead
+- [ui] Removed preseed upload UI
+
 ## [0.5.1] - 2024-11-12
 
 ### Added
