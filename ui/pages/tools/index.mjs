@@ -5,7 +5,6 @@ import {
   BriefcaseIcon,
   CertificateIcon,
   CogIcon,
-  PackageIcon,
   OpenLockIcon,
   ClosedLockIcon,
   UserIcon,
@@ -24,14 +23,6 @@ const ToolsPage = (props) => (
             width="w-full"
             Icon={UserIcon}
             role="manager"
-          />
-          <Card
-            title="Client Packages"
-            href="/tools/pkgs"
-            desc="Generate morio-client packages that are pre-configured to integrate with this Morio deployment."
-            width="w-full"
-            Icon={PackageIcon}
-            role="operator"
           />
           <Card
             title="Decrypt Data"

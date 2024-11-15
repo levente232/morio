@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2024-11-15
+
+### Added
+
+- [client] Run morio init on install
+- [drbuilder] Added new drbuilder service
+- [core] Build both client and repo installer package on initial setup
+
+### Fixed
+
+- [client] Do not attempt to enable services at install
+- [client] Handle status subcommand when no arguments are passed
+- [dbuilder] Fixed issue in the client package build step that resolved in an invalid APT package
+- [dbuilder] Fix issue with the repo installer package build
+- [moriod] Detect non-interactive invocation in install script
+- [ui] Downloads page now lists the Repository Installer packages
+- [web] Handle non-interactive terminal in installer script
+
 ## [0.5.3] - 2024-11-13
 
 ### Changed
