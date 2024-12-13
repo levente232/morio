@@ -1,0 +1,44 @@
+---
+- name: Reset Morio configuration on the EC2 instances
+  hosts: all
+  become: yes
+  become_method: sudo
+  tasks:
+    - name: Make backup directory
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.moriod"
+        state: directory
+        mode: '0755'
+      ignore_errors: true
+
+    - name: Backup version info
+      ansible.builtin.copy:
+        src: /etc/morio/moriod/version*
+        dest: "{{ ansible_env.HOME }}/.moriod/"
+        remote_src: yes
+      ignore_errors: true
+
+    - name: Remove Morio configuration files
+      ansible.builtin.file:
+        path: /etc/morio/moriod/*
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Morio logs
+      ansible.builtin.file:
+        path: /var/log/morio/moriod/*
+        state: absent
+      ignore_errors: true
+
+    - name: Remove Morio database files
+      ansible.builtin.file:
+        path: /var/lib/morio/moriod/*
+        state: absent
+      ignore_errors: true
+
+    - name: Copy Back Version Files
+      ansible.builtin.copy:
+        src: "{{ ansible_env.HOME }}/.moriod/version*"
+        dest: /etc/morio/moriod/
+        remote_src: yes
+      ignore_errors: true
