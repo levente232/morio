@@ -1,0 +1,73 @@
+name: Deploy and Configure Morio
+
+on:
+  workflow_dispatch:  # This allows the workflow to be triggered manually
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '20'  # Replace with the Node.js version you need
+
+      - name: Configure AWS CLI
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.ITEST_AWS_SUBNET_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws configure set region ${{ secrets.AWS_REGION }}  # You can specify the region here, e.g., 'us-west-2'
+          aws configure set output json  # Set the output format to JSON
+
+      - name: Install Ansible
+        run: |
+          sudo apt-get install -y ansible
+
+      - name: Install required Ansible collections
+        run: |
+          ansible-galaxy collection install amazon.aws community.general
+
+      - name: Install Python dependencies for Ansible
+        run: |
+          pip3 install boto boto3
+
+      - name: Install Node.js dependencies
+        run: |
+          npm install
+          npm install dotenv  # Install dotenv package for environment configuration
+
+      - name: Set PR ID as Environment Variable
+        if: ${{ github.event.pull_request.number }}
+        run: echo "PR_ID=${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+
+      - name: Run ideploy (Deploy to the environment)
+        run: |
+          npm run ideploy
+        env:
+          PR_ID: ${{ env.PR_ID }}
+          ITEST_AWS_SUBNET_ID: ${{ secrets.ITEST_AWS_SUBNET_ID }}
+          ITEST_AWS_SECURITY_GROUP_ID: ${{ secrets.ITEST_AWS_SECURITY_GROUP_ID }}
+          ITEST_AWS_ROUTE53_ZONE_ID: ${{ secrets.ITEST_AWS_ROUTE53_ZONE_ID }}
+          ITEST_AWS_DEBIAN12_AMI_ID: ${{ secrets.ITEST_AWS_DEBIAN12_AMI_ID }}
+          ITEST_AWS_SSH_PUBKEY_1_ID: ${{ secrets.AWS_SSH_PUBKEY1 }}
+          ITEST_AWS_SSH_PUBKEY_2_ID: ${{ secrets.AWS_SSH_PUBKEY2 }}
+
+      - name: Run isetup (Deploy and setup)
+        run: |
+          npm run isetup
+
+      - name: Run itest (Testing)
+        run: |
+          npm run itest ephemeral
+
+      - name: Run iconfigure (Configure)
+        run: |
+          npm run iconfigure
+
+      - name: Run idestroy (Destroy resources)
+        run: |
+          npm run idestroy
