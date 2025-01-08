@@ -1,146 +1,129 @@
-import dns from 'dns';
-import https from 'https';
-import axios from 'axios';
+import https from 'https'
+import axios from 'axios'
 import { strict as assert } from 'node:assert'
 import { getPreset } from '../config/index.mjs'
+import { Store } from '../shared/src/store.mjs'
+import { logger } from '../shared/src/logger.mjs'
+import { attempt, sleep } from '../shared/src/utils.mjs'
+import { sharedStorage } from './disk-storage.mjs'
+import dotenv from 'dotenv'
 
-const dnsOptions = {
-  family: 4, // Don't use IPv6
-  all: true, // Return all addresses
-};
+dotenv.config()
+
+const store = new Store().set('log', logger('trace'))
 
 // Create a global httpsAgent for requests with ignored SSL certificates
-const globalHttpsAgent = new https.Agent({ rejectUnauthorized: false });
+const globalHttpsAgent = new https.Agent({ rejectUnauthorized: false })
 
-/**
- * Helper method to resolve a hostname
- */
-export async function resolveHost(host) {
-  let result;
-  try {
-    result = await dns.promises.lookup(host, dnsOptions);
-  } catch (err) {
-    return [false, `Failed to resolve host: ${host}`];
-  }
-  return [true, result.map((record) => record.address)];
+const brokerNodes = process.env.MORIO_TEST_DNS_NAMES
+  ? process.env.MORIO_TEST_DNS_NAMES.split(',').map((name) => name.trim())
+  : []
+
+const fqdn = process.env.MORIO_TEST_FQDN ? process.env.MORIO_TEST_FQDN : process.env.MORIO_TEST_HOST
+
+const hostName = fqdn.split('.')[0]
+
+const setup = {
+  cluster: {
+    name: 'Morio Unit Tests',
+    broker_nodes: brokerNodes,
+  },
+  iam: {
+    providers: {
+      apikey: {
+        provider: 'apikey',
+        id: 'apikey',
+        label: 'API Key',
+      },
+      mrt: {},
+      local: {
+        provider: 'local',
+        id: 'local',
+        label: 'Morio Account',
+      },
+    },
+    ui: {
+      visibility: {
+        local: 'full',
+        mrt: 'icon',
+        apikey: 'icon',
+      },
+      order: ['local', 'apikey', 'mrt'],
+    },
+  },
 }
 
-export async function resolveHostAsIp(host) {
-  const result = (await resolveHost(host))[1];
-  return Array.isArray(result) && result.length > 0 ? result[0] : false;
-}
-
-/**
- * Helper method to test a URL
- */
-export async function testUrl(url, customOptions = {}) {
-  const options = {
-    method: 'GET',
-    headers: {},
-    data: undefined,
-    ignoreCertificate: true,
-    timeout: 1500,
-    returnAs: false,
-    returnError: false,
-    ...customOptions,
-  };
-
-  if (options.ignoreCertificate && url.trim().toLowerCase().startsWith('https://')) {
-    options.httpsAgent = globalHttpsAgent;
-  }
-
-  try {
-    const result = await axios(url, options);
-
-    switch (options.returnAs) {
-      case 'status':
-        return result.status;
-      case 'body':
-      case 'text':
-      case 'json':
-        return result.data;
-      case 'check':
-        return ![4, 5].includes(String(result.status).charAt(0));
-      default:
-        return result;
-    }
-  } catch (err) {
-    return options.returnError ? err : false;
-  }
-}
-
-export async function __withoutBody(method, url, raw = false, log = false, ignoreCertificate = true) {
+async function __withoutBody(method, url, raw = false, log = false, ignoreCertificate = true) {
   const requestConfig = {
     method: method.toUpperCase(), // Accepts "GET" or "DELETE"
     url: url,
     ...(ignoreCertificate ? { httpsAgent: globalHttpsAgent } : {}),
-  };
+  }
 
   try {
-    const response = await axios(requestConfig);
+    const response = await axios(requestConfig)
 
-    const body = raw ? response.data : response.data;
-    return [response.status, body];
+    const body = raw ? response.data : response.data
+    return [response.status, body]
   } catch (err) {
-    if (log) console.error({ url, err });
-    return [err.response?.status || 500, err.response?.data || "An error occurred"];
+    if (log) console.error({ url, err })
+    return [err.response?.status || 500, err.response?.data || 'An error occurred']
   }
 }
 
-async function __withBody(method, url, data, raw = false, log = false, ignoreCertificate = true) {
+async function __withBody(
+  method,
+  url,
+  data,
+  raw = false,
+  log = false,
+  ignoreCertificate = true,
+  jwtToken = null
+) {
   const requestConfig = {
     method,
     url,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(jwtToken && { Authorization: `Bearer ${jwtToken.jwt}` }),
+    },
     data,
     ...(ignoreCertificate && { httpsAgent: globalHttpsAgent }),
-  };
+  }
 
   try {
-    const response = await axios(requestConfig);
+    const response = await axios(requestConfig)
 
-    if (response.status === 204) return [response.status, {}];
-    const parsedData = raw ? response.data : response.data;
-    return [response.status, parsedData];
+    if (response.status === 204) return [response.status, {}]
+    const parsedData = raw ? response.data : response.data
+    return [response.status, parsedData]
   } catch (err) {
-    if (log) console.error({url, err});
-    return [err.response?.status || 500, err.response?.data || "An error occurred"];
+    if (log) console.error({ url, err })
+    return [err.response?.status || 500, err.response?.data || 'An error occurred']
   }
 }
 
-// export async function post(url, data, ignoreCertificate = true) {
-//   return __withBody('POST', url, data, false, false, ignoreCertificate);
-// }
-
-// export async function put(url, data, ignoreCertificate = true) {
-//   return __withBody('PUT', url, data, false, false, ignoreCertificate);
-// }
-
-// export async function patch(url, data, ignoreCertificate = true) {
-//   return __withBody('PATCH', url, data, false, false, ignoreCertificate);
-// }
-
-// export async function remove(url, data, ignoreCertificate = true) {
-//   return __withBody('DELETE', url, data, false, false, ignoreCertificate);
-// }
-
-export function restClient(api) {
+function restClient(api) {
   return {
-    get: (url, raw, log, ignoreCertificate) => __withoutBody('GET', api + url, raw, log, ignoreCertificate),
-    post: (url, data, raw, log, ignoreCertificate) => __withBody('POST', api + url, data, raw, log, ignoreCertificate),
-    put: (url, data, raw, log, ignoreCertificate) => __withBody('PUT', api + url, data, raw, log, ignoreCertificate),
-    patch: (url, data, raw, log, ignoreCertificate) => __withBody('PATCH', api + url, data, raw, log, ignoreCertificate),
-    remove: (url, raw, log, ignoreCertificate) => __withoutBody('DELETE', api + url, raw, log, ignoreCertificate),
-  };
+    get: (url, raw, log, ignoreCertificate) =>
+      __withoutBody('GET', api + url, raw, log, ignoreCertificate),
+    post: (url, data, raw, log, ignoreCertificate, jwtToken) =>
+      __withBody('POST', api + url, data, raw, log, ignoreCertificate, jwtToken),
+    put: (url, data, raw, log, ignoreCertificate) =>
+      __withBody('PUT', api + url, data, raw, log, ignoreCertificate),
+    patch: (url, data, raw, log, ignoreCertificate) =>
+      __withBody('PATCH', api + url, data, raw, log, ignoreCertificate),
+    remove: (url, raw, log, ignoreCertificate) =>
+      __withoutBody('DELETE', api + url, raw, log, ignoreCertificate),
+  }
 }
 
-export function validateErrorResponse (result, errors, template) {
+function validateErrorResponse(result, errors, template) {
   const err = errors[template]
 
   if (!err) assert.equal('This is not a known error template', template)
   else {
     assert.equal(Array.isArray(result), true)
-    // assert.equal(3, result.length, 3)  // return array only contains 2 [success, body]
     assert.equal(2, result.length)
     assert.equal(result[0], err.status)
     assert.equal(typeof result[1], 'object')
@@ -149,4 +132,49 @@ export function validateErrorResponse (result, errors, template) {
     assert.equal(result[1].detail, err.detail)
     assert.equal(typeof result[1].instance, 'string')
   }
+}
+
+const core = restClient(`http://core:${getPreset('MORIO_CORE_PORT')}`)
+
+async function isCoreReady() {
+  const res = await core.get('/status')
+  const [status, result] = res
+
+  return status === 200 && result.node.config_resolved === true ? true : false
+}
+
+const api = restClient(`https://${process.env.MORIO_TEST_HOST}/-/api`)
+
+async function isApiReady() {
+  const [status, result] = await api.get('/status')
+
+  return status === 200 && result.state.config_resolved === true ? true : false
+}
+
+const accounts = {
+  user: {
+    username: `testAccount${Date.now()}`,
+    about: 'This account was created as part of a test',
+    provider: 'local',
+    role: 'engineer',
+  },
+}
+
+export {
+  accounts,
+  sharedStorage,
+  core,
+  store,
+  isCoreReady,
+  isApiReady,
+  validateErrorResponse,
+  restClient,
+  getPreset,
+  attempt,
+  sleep,
+  setup,
+  api,
+  brokerNodes,
+  fqdn,
+  hostName,
 }
