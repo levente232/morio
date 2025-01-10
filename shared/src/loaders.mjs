@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'node:fs'
 import { testUrl } from './network.mjs'
 import set from 'lodash/set.js'
 import yaml from 'js-yaml'
@@ -6,6 +6,7 @@ import { Buffer } from 'node:buffer'
 import { simpleGit } from 'simple-git'
 import { hash } from './crypto.mjs'
 import { rm, mkdir, readFile, globDir } from './fs.mjs'
+import { cloneAsPojo } from './utils.mjs'
 
 /*
  * A collection of utils to load various files
@@ -157,28 +158,31 @@ async function loadPreseedBaseFile(preseed, gitroot, log) {
  * Helper method to load preseeded settings
  *
  * @param {object} preseed - The preseed settings
+ * @param {object} currentSettings - The full settings
  * @param {object} log - A logger instance
  * @param {string} gitroot - Folder in which to clone git repos
  * @return {object} config - The loaded config
  */
-export async function loadPreseededSettings(preseed, log, gitroot = '/etc/morio/shared') {
+export async function loadPreseededSettings(preseed, currentSettings=false, log, gitroot = '/etc/morio/shared') {
   /*
    * If there's a git config, we need to handle that first
    */
-  if (preseed.git) {
-    for (const [id, config] of Object.entries(preseed.git)) {
-      await loadGitRepo(gitroot, id, config, log)
-    }
-  }
+  await ensurePreseededContent(preseed, log, gitroot)
 
   /*
-   * Attempt to load the preseed base file
+   * Attempt to load the preseed base file (if there is one)
+   * Else, start from the current settings
    */
-  const settings = await loadPreseedBaseFile(preseed, gitroot, log)
+  const settings = preseed.base
+    ? await loadPreseedBaseFile(preseed, gitroot, log)
+    : cloneAsPojo(currentSettings)
   if (!settings) {
-    log.warn(`Failed to load preseed base file`)
+    log.warn(preseed.base
+      ? `Failed to load preseed base file`
+      : `Failed to construct initial settings`
+    )
     return false
-  } else log.debug(`Loaded preseed base file`)
+  } else if (preseed.base) log.debug(`Loaded preseed base file`)
 
   /*
    * Load any preseed overlays
@@ -418,7 +422,7 @@ async function readFileFromRepo(id, path, gitroot) {
  * @param {string} gitroot - Folder holding the cloned git repos
  * @param {array} found - Found files
  */
-async function globFilesFromRepo(pattern, repo, gitroot) {
+export async function globFilesFromRepo(pattern, repo, gitroot) {
   const base = `${gitroot}/${sanitizeGitFolder(repo)}`
   const files = await globDir(`${gitroot}/${sanitizeGitFolder(repo)}`, pattern)
 
@@ -438,8 +442,17 @@ function sanitizeGitFolder(id) {
   return hash(id)
 }
 
-export async function loadClientModules(settings, targetFolder, log) {
-  if (typeof settings?.client?.modules !== 'object') return
+export async function loadClientModules(settings, log) {
+  /*
+   * Don't bother unless we have modules to load
+   */
+  const globs = settings?.preseed?.modules
+  if (!Array.isArray(globs) || globs.length < 1) return
+
+  /*
+   * Folder inside the core container where to store the client files
+   */
+  const targetFolder = '/morio/clients/linux/etc/morio'
 
   /*
    * Create client folder structure
@@ -454,7 +467,7 @@ export async function loadClientModules(settings, targetFolder, log) {
   for (const folder of folders) {
     const dir = `${targetFolder}/${folder}`
     try {
-      log.trace(`Removing ${dir}`)
+      log.trace(`Removing seeded client modules: ${dir}`)
       await rm(dir, { recursive: true, force: true }) // Do not mutate, just rm and recreate
       await mkdir(dir, log)
     } catch (err) {
@@ -463,38 +476,150 @@ export async function loadClientModules(settings, targetFolder, log) {
   }
 
   /*
-   * We should load these in alphabetic order
+   * Now load client modules
    */
-  const sources = Object.keys(settings.client.modules).sort()
-  const promises = []
-  for (const id of sources) {
-    const source = settings.client.modules[id]
-    if (source.slice(0,4) === 'git:') {
-      const [folder, repo] = source.slice(4).split('@')
+  for (const entry of globs) {
+    if (entry.slice(0,4) === 'git:') {
+      const [pattern, repo] = entry.slice(4).split('@')
       if (settings.preseed?.git?.[repo]) {
-        const { base, files } = await globFilesFromRepo(`${folder}/**`, repo, '/etc/morio/shared')
-        for (const file of files) promises.push(loadClientModuleFile(base, targetFolder, file, log))
+        const { files } = await globFilesFromRepo( pattern, repo, '/etc/morio/shared')
+        for (const sourceFile of files) {
+          const targetFile = findPreseedTarget(sourceFile, 'modules')
+          if (targetFile && (
+            sourceFile.slice(-4) === ".yml" ||
+            sourceFile.slice(-6) === ".rules"
+          )) {
+            const copy = await copyPreseedFile({
+              sourceFile,
+              targetFile,
+              targetFolder,
+            })
+            if (copy) log.debug(`Seeding client module file: ${targetFile}`)
+            else log.warn(`Failed to seed client module file: ${targetFile}`)
+          }
+        }
       }
     }
   }
 
-  return await Promise.all(promises)
+  return true
 }
 
-function loadClientModuleFile(base, folder, file, log) {
-  let promise = true
-  if (file.slice(0, base.length + 9) === `${base}/modules/`) {
-    const template = file.slice(base.length + 9)
-    if (file.slice(-5) === ".yaml" || file.slice(-5) === ".rules") {
-      log.trace(`Loading client template ${template}`)
-      try {
-        promise = fs.promises.cp(file, `/morio/core/${folder}/${template}.disabled`)
-      } catch (err) {
-        return false
+export async function loadStreamProcessors(settings, log) {
+  /*
+   * Don't bother unless we have processors to load
+   */
+  const globs = settings?.preseed?.processors
+  if (!Array.isArray(globs) || globs.length < 1) return
+
+  /*
+   * Folder inside the core container where to store the client files
+   */
+  const targetFolder = '/morio/tap/processors'
+
+  /*
+   * Clear processors folder
+   */
+  const current = await globDir(targetFolder, `**`)
+  for (const file of current) {
+    try {
+      log.trace(`Removing seeded stream processors: ${file}`)
+      await rm(file, { force: true, recursive: true })
+    }
+    catch (err) {
+      log.warn(err, `Failed to remove ${file}`)
+    }
+  }
+
+  /*
+   * Now load stream processors
+   */
+  for (const entry of globs) {
+    if (entry.slice(0,4) === 'git:') {
+      const [pattern, repo] = entry.slice(4).split('@')
+      if (settings.preseed?.git?.[repo]) {
+        const { files } = await globFilesFromRepo( pattern, repo, '/etc/morio/shared')
+        for (const sourceFile of files.sort()) {
+          const targetFile = findPreseedTarget(sourceFile, 'processors')
+          if (targetFile && sourceFile.slice(-4) === ".mjs") {
+            const copy = await copyPreseedFile({
+              sourceFile,
+              targetFile,
+              targetFolder,
+            }, 2112) // 2112 is the user id of the user inside the tap container
+            if (copy) {
+              log.debug(`Seeding stream processing file: ${targetFile}`)
+              /*
+               * We need to dynamically load its settings too
+               * Or at least, if there are none.
+               */
+              const chunks = targetFile.split('/')
+              const processor = chunks[0]
+              const mod = (chunks.length === 3 && chunks[1] === 'modules' && chunks[2].slice(-4) === '.mjs')
+                ? chunks[2].slice(0, -4)
+                : false
+              const load = await import(sourceFile)
+              if (load?.info?.settings) {
+                if (typeof settings.tap === 'undefined') settings.tap = {}
+                if (typeof settings.tap?.[processor] === 'undefined') settings.tap[processor] = {}
+                /*
+                 * Is it a stream processor module?
+                 */
+                if (mod) {
+                  if (typeof settings.tap[processor]?.modules === 'undefined') {
+                    settings.tap[processor].modules = {}
+                  }
+                  settings.tap[processor].modules[mod] = ensureStreamProcessorSettings(
+                    load.info.settings,
+                    settings.tap[processor].modules[mod]
+                  )
+                } else {
+                  settings.tap[processor] = ensureStreamProcessorSettings(load.info.settings, settings.tap[processor])
+                }
+              }
+            }
+            else log.warn(`Failed to seed stream processing file: ${targetFile}`)
+          }
+        }
       }
     }
   }
 
-  return promise
+  return settings
 }
+
+function ensureStreamProcessorSettings(seededSettings, morioSettings) {
+  for (const [key, val] of Object.entries(seededSettings)) {
+    if (typeof val.dflt !== 'undefined') {
+      if (typeof morioSettings[key] === 'undefined') morioSettings[key] = val.dflt
+    }
+  }
+
+  return morioSettings
+}
+
+async function copyPreseedFile ({ sourceFile, targetFile, targetFolder }, chownId=false) {
+  try {
+    await mkdir(targetFolder)
+    if (chownId) await fs.promises.chown(targetFolder, chownId, chownId)
+    await fs.promises.cp(sourceFile, `${targetFolder}/${targetFile}`)
+    if (chownId) await fs.promises.chown(`${targetFolder}/${targetFile}`, chownId, chownId)
+  } catch (err) {
+    console.log(err)
+    return false
+  }
+
+  return true
+}
+
+function findPreseedTarget (file, root) {
+  const start  = reverseString(file).indexOf(`/${reverseString(root)}/`)
+  if (start === -1) return false
+  else return file.slice(-1 * start)
+}
+
+function reverseString (str) {
+  return str.split('').reverse().join('')
+}
+
 
