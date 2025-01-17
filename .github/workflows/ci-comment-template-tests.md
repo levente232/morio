@@ -1,5 +1,7 @@
 {{{ CI_HEADER }}}
 
+#### Summary
+
 | Step                   | Result                 | Icon                 |
 | ---------------------- | ---------------------- | -------------------- |
 | Instantiate repository | {{ CI_STATUS_REPO }}   | {{ CI_ICON_REPO }}   |

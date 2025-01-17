@@ -22,4 +22,6 @@ jobs:
         env:
           PR_NUMBER: ${{ github.event.issue.number }}
           GH_TOKEN: ${{ github.token }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMENT_URL= ${{ github.event.comment.html_url }}
         run: ./.github/workflows/run-e2e-tests.sh
