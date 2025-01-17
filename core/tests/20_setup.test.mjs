@@ -1,7 +1,8 @@
-import { store, core, setup, getPreset, validateErrorResponse } from './utils.mjs'
+import { store, core, setup, validateErrorResponse } from './utils.mjs'
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 import { errors } from '../src/errors.mjs'
+import process from 'node:process'
 
 describe('Core Setup Tests', () => {
   // POST /setup - no body
@@ -22,7 +23,7 @@ describe('Core Setup Tests', () => {
       ...setup,
       // Normally, the proxy adds the headers to the body
       // Since we're talking to core directly, we need to do this ourselves
-      headers: { 'x-forwarded-host': getPreset('MORIO_UNIT_TEST_HOST') },
+      headers: { 'x-forwarded-host': process.env['MORIO_FQDN'] },
     })
     const d = result[1]
     assert.equal(Array.isArray(result), true)
