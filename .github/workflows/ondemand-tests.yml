@@ -21,4 +21,4 @@ jobs:
       - name: Run end-to-end tests
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./.github/workflows/run-e2e-tests.sh
+        run: export PR_NUMBER=$PR_NUMBER && ./.github/workflows/run-e2e-tests.sh
