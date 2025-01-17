@@ -3,11 +3,10 @@
 # This installs the mustache templating language for bash
 # But only if it's not already in place (checks ./local/bin/mo)
 function ensureMo {
-  if [ -f "path/to/file" ]; then
+  if [ -f "./local/bin/mo" ]; then
     echo "Found mo"
   else
     echo "Installing mo (the mustache templating language for Bash)"
-    pwd
     mkdir -p ./local/bin/
     curl -sSL https://raw.githubusercontent.com/tests-always-included/mo/master/mo -o ./local/bin/mo
     chmod +x ./local/bin/mo
@@ -29,14 +28,14 @@ function ensurePrNumber {
 function createComment {
   ensureMo
   ensurePrNumber
-  cat .github/workflows/ci-comment-template-tests.md | ./local/bin/mo | gh pr comment $PR_NUMBER -
+  cat .github/workflows/ci-comment-template-tests.md | ./local/bin/mo | gh pr comment $PR_NUMBER --body-file -
 }
 
 # This updates the PR comment
 function updateComment {
   ensureMo
   ensurePrNumber
-  cat .github/workflows/ci-comment-template-tests.md | ./local/bin/mo | gh pr comment --edit-last $PR_NUMBER -
+  cat .github/workflows/ci-comment-template-tests.md | ./local/bin/mo | gh pr comment --edit-last $PR_NUMBER --body-file -
 }
 
 export HEADER="As requested by @{{ COMMENT_AUTHOR }} in [this comment]({{ COMMENT_URL }}), we will now proceed to test this pull request.<br>To do so, we will provision ephemeral infrastructure to run the end-to-end tests. This will take a while, but we will keep you abreast by updating this comment as we make progress.\n\n#### Summary"
