@@ -7,7 +7,8 @@ function ensureMo {
     echo "Found mo"
   else
     echo "Installing mo (the mustache templating language for Bash)"
-    mkdir -p .local/bin/
+    pwd
+    mkdir -p ./local/bin/
     curl -sSL https://raw.githubusercontent.com/tests-always-included/mo/master/mo -o ./local/bin/mo
     chmod +x ./local/bin/mo
   fi
