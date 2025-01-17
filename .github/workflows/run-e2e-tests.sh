@@ -16,6 +16,16 @@ createComment
 # See: https://docs.npmjs.com/cli/v11/commands/npm-ci
 npm ci
 
+# We cannot continue, so let's inform the user
+export CI_STATUS_DEPS="Success"
+export CI_ICON_DEPS="✅"
+export CI_STATUS_UCORE="Skipped"
+export CI_ICON_UCORE="⏩"
+export CI_STATUS_UAPI="Skipped"
+export CI_ICON_UAPI="⏩"
+export CI_ERROR_FOOTER="The unit tests cannot be ran on a GitHub hosted runner, so they are skipped for now"
+updateComment
+
 # The rest needs to run on a self-hosted runner
 # but the steps are:
 
