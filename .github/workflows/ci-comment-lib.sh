@@ -28,6 +28,8 @@ function ensurePrNumber {
 function createComment {
   ensureMo
   ensurePrNumber
+  echo "Will comment this:"
+  cat .github/workflows/ci-comment-template-tests.md | ./local/bin/mo
   cat .github/workflows/ci-comment-template-tests.md | ./local/bin/mo | gh pr comment $PR_NUMBER --body-file -
 }
 
