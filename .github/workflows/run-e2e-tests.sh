@@ -5,5 +5,6 @@ source .github/workflows/ci-comment-lib.sh
 set -e
 
 # Create the intial comment to inform the user
+echo "folder: ${pwd}"
 createComment
 
