@@ -7,6 +7,7 @@ const custom = {
 }
 
 const DashboardsPage = (props) => {
+  console.log(allIcons)
   return (
     <PageWrapper {...props}>
       <ContentWrapper {...props}>
