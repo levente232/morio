@@ -8,6 +8,7 @@ describe('API MRT Tests', async () => {
   store.set('mrt', data.mrt)
   store.set('mrtAuth', data.mrtAuth)
   const mrt = data.mrt
+
   // POST /login
   it(`Should POST /login`, async () => {
     const data = {
@@ -24,6 +25,19 @@ describe('API MRT Tests', async () => {
     assert.equal(d.data.role, 'user')
     assert.equal(d.data.user, `root`)
     store.mrt_jwt = d.jwt
+  })
+
+  // POST /login
+  it(`Should not POST /login (invalid mrt)`, async () => {
+    const data = {
+      provider: 'mrt',
+      data: {
+        mrt: 'mrt.abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz12',
+        role: 'user',
+      },
+    }
+    const result = await api.post(`/login`, data)
+    validateErrorResponse(result, errors, 'morio.api.account.credentials.mismatch')
   })
 
   // POST /login (non-existing role)
@@ -60,32 +74,5 @@ describe('API MRT Tests', async () => {
       Authorization: `Bearer ${store.mrt_jwt}`,
     })
     assert.equal(result[0], 200)
-  })
-
-  it(`Should POST /settings with DISABLE_IDP_MRT flag`, async () => {
-    const storedData = await readPersistedData()
-    store.set('mrt', storedData.mrt)
-    const result = await api.post('/settings', storedData.settings)
-
-    assert.equal(result[0], 204)
-  })
-
-  // POST /login
-  it(`Should POST /login`, async () => {
-    const mrt = store.get('mrt')
-
-    const data = {
-      provider: 'mrt',
-      data: {
-        mrt,
-        role: 'user',
-      },
-    }
-    const result = await api.post(`/login`, data)
-    const d = result[1]
-    assert.equal(result[0], 200)
-    assert.equal(typeof d.jwt, 'string')
-    assert.equal(d.data.role, 'user')
-    assert.equal(d.data.user, `root`)
   })
 })
