@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- [tap] Reset npm environment in container to avoid npm issues
+- [tap] Missing comma in auto-generated stream processors module loader
+
 ## [0.6.0] - 2025-01-23
 
 ### Added
