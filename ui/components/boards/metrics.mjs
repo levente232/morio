@@ -1,8 +1,9 @@
 // Dependencies
 import { formatBytes, timeAgo } from 'lib/utils.mjs'
 import orderBy from 'lodash/orderBy.js'
+import { chartTemplates } from './chart-templates.mjs'
 // Hooks
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useApi } from 'hooks/use-api.mjs'
 // Components
@@ -14,12 +15,15 @@ import { Uuid } from 'components/uuid.mjs'
 import { Host } from 'components/inventory/host.mjs'
 import { KeyVal } from 'components/keyval.mjs'
 import { Popout } from 'components/popout.mjs'
-import { ToggleLiveButton } from 'components/boards/shared.mjs'
+import { ToggleLiveButton, cacheStreamAsObj } from 'components/boards/shared.mjs'
+import { ChartsProvider } from './charts-provider.mjs'
+import { Echart } from 'components/echarts.mjs'
+import { Details } from 'components/details.mjs'
 
 /**
- * This compnent renders a table with the host for which we have cached logs
+ * This compnent renders a table with the host for which we have cached metrics
  */
-export const LogsTable = ({ cacheKey = 'logs' }) => {
+export const MetricsTable = ({ cacheKey = 'metrics' }) => {
   // State
   const [cache, setCache] = useState(false)
   const [inventory, setInventory] = useState({})
@@ -32,7 +36,7 @@ export const LogsTable = ({ cacheKey = 'logs' }) => {
 
   // Effects
   useEffect(() => {
-    runLogsTableApiCall(api, cacheKey).then((result) => {
+    runMetricsTableApiCall(api, cacheKey).then((result) => {
       if (result.cache) setCache(result.cache)
       if (result.inventory) setInventory(result.inventory)
     })
@@ -48,7 +52,7 @@ export const LogsTable = ({ cacheKey = 'logs' }) => {
       </>
     )
 
-  // Don't bother if there's nothing in the caceh
+  // Don't bother if there's nothing in the cache
   if (cache.length < 1)
     return (
       <>
@@ -90,10 +94,10 @@ export const LogsTable = ({ cacheKey = 'logs' }) => {
           {sorted.map((host) => (
             <tr key={host.id}>
               <td className="">
-                <Uuid uuid={host.id} href={`/boards/logs/${host.id}`} />
+                <Uuid uuid={host.id} href={`/boards/metrics/${host.id}`} />
               </td>
               <td className="">
-                <PageLink href={`/boards/logs/${host.id}`}>{host.name || host.fqdn}</PageLink>
+                <PageLink href={`/boards/metrics/${host.id}`}>{host.name || host.fqdn}</PageLink>
               </td>
               <td className="">{host.cores}</td>
               <td className="">{formatBytes(host.memory)}</td>
@@ -117,7 +121,7 @@ function unknownHost(id) {
   }
 }
 
-async function runLogsTableApiCall(api, key) {
+async function runMetricsTableApiCall(api, key) {
   const data = {}
   let result = await api.getCacheKey(key)
   if (Array.isArray(result) && result[1] === 200) data.cache = result[0].value
@@ -128,9 +132,9 @@ async function runLogsTableApiCall(api, key) {
 }
 
 /**
- * This compnent renders a table with all cached logs for a given host
+ * This component renders a table with all cached metrics for a given host
  */
-export const HostLogsTable = ({ host, module = false }) => {
+export const HostMetricsTable = ({ host, module = false }) => {
   // State
   const [cache, setCache] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -142,7 +146,7 @@ export const HostLogsTable = ({ host, module = false }) => {
 
   // Effects
   useEffect(() => {
-    runHostLogsTableApiCall(api, host).then((result) => {
+    runHostMetricsTableApiCall(api, host).then((result) => {
       if (result.cache) setCache(result.cache)
     })
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
@@ -157,7 +161,7 @@ export const HostLogsTable = ({ host, module = false }) => {
       </>
     )
 
-  // Don't bother if there's nothing in the caceh
+  // Don't bother if there's nothing in the cache
   if (Object.keys(cache).length < 1)
     return (
       <>
@@ -170,13 +174,13 @@ export const HostLogsTable = ({ host, module = false }) => {
   const data = []
   for (const mod in cache) {
     if (!module || mod === module) {
-      for (const logset of JSON.parse(cache[mod])) {
-        data.push({ module: mod, logset, host })
+      for (const metricset of JSON.parse(cache[mod])) {
+        data.push({ module: mod, metricset, host })
       }
     }
   }
   const sorted = orderBy(data, [order], [desc ? 'desc' : 'asc'])
-  const cols = module ? ['logset'] : ['module', 'logset']
+  const cols = module ? ['metricset'] : ['module', 'metricset']
 
   return (
     <>
@@ -205,13 +209,13 @@ export const HostLogsTable = ({ host, module = false }) => {
             <tr key={entry.lolset + entry.host + entry.module}>
               {module ? null : (
                 <td className="">
-                  <PageLink href={`/boards/logs/${host}/${entry.module}/`}>{entry.module}</PageLink>
+                  <PageLink href={`/boards/metrics/${host}/${entry.module}/`}>{entry.module}</PageLink>
                 </td>
               )}
               <td className="">
-                <MorioLogset
-                  name={entry.logset}
-                  href={`/boards/logs/${host}/${entry.module}/${entry.logset}`}
+                <MorioMetricset
+                  name={entry.metricset}
+                  href={`/boards/metrics/${host}/${entry.module}/${entry.metricset}`}
                 />
               </td>
             </tr>
@@ -223,9 +227,9 @@ export const HostLogsTable = ({ host, module = false }) => {
   )
 }
 
-async function runHostLogsTableApiCall(api, host) {
+async function runHostMetricsTableApiCall(api, host) {
   const data = {}
-  let result = await api.getCacheKey(`logs|${host}`)
+  let result = await api.getCacheKey(`metrics|${host}`)
   if (Array.isArray(result) && result[1] === 200) data.cache = result[0].value
   result = await api.getInventoryHost(host)
   if (Array.isArray(result) && result[1] === 200) data.inventory = result[0]
@@ -233,17 +237,36 @@ async function runHostLogsTableApiCall(api, host) {
   return data
 }
 
-const MorioLogset = ({ name, href }) =>
+const MorioMetricset = ({ name, href }) =>
   href ? (
     <PageLink href={href}>{name.split('.').join(' / ')}</PageLink>
   ) : (
     <span>{name.split('.').join(' / ')}</span>
   )
 
-/**
- * This compnent renders a table with all cached logs for a given host
+/*
+ * Wrapper to provide echarts dynamic chart handlers
  */
-export const ShowLogs = ({ host, module, logset }) => {
+export const ShowMetrics = (props) => (
+  <ChartsProvider type='metrics'>
+    <ShowMetricsInner {...props} />
+  </ChartsProvider>
+)
+
+// Avoid re-using objects
+const clone = (data) => JSON.parse(JSON.stringify(data))
+
+const transformMetrics = ({ host, module, metricset, data, templates }) => (
+  typeof window?.morio?.charts?.metrics?.[module]?.[metricset] === 'function'
+)
+  ? window.morio.charts.metrics[module][metricset]({host, module, metricset, data, templates, clone})
+  : data
+
+/**
+ * This component renders visualisations for all cached
+ * metrics for a given host/module/metricset
+ */
+const ShowMetricsInner = ({ host, module, metricset, hostname, show }) => {
   // State
   const [cache, setCache] = useState(false)
   const [paused, setPaused] = useState(false)
@@ -251,9 +274,9 @@ export const ShowLogs = ({ host, module, logset }) => {
   // Hooks
   const { api } = useApi()
   useQuery({
-    queryKey: [`${host}|${module}|${logset}`],
+    queryKey: [`${host}|${module}|${metricset}`],
     queryFn: () => {
-      runShowLogsApiCall(api, host, module, logset).then((result) => {
+      runShowMetricsApiCall(api, host, module, metricset).then((result) => {
         if (result.cache) setCache(result.cache)
       })
     },
@@ -261,52 +284,24 @@ export const ShowLogs = ({ host, module, logset }) => {
     refetchIntervalInBackground: false,
   })
 
-  // Don't bother if there's nothing in the caceh
-  if (!cache || cache.length < 1)
-    return (
+
+  // Defer to chart transformer
+  const data = parseCachedMetrics(cache)
+
+  // Don't bother if there's nothing in the cache
+  return (!cache || cache.length < 1)
+    ? (
       <>
         <Loading />
         <p>Nothing in the cache to show you here.</p>
       </>
     )
-
-  // Can we figure out the field names?
-  let fields = false
-  try {
-    fields = Object.keys(JSON.parse(cache[0]))
-  } catch (err) {
-    // ah well
-  }
-
-  return (
-    <>
-      <Host uuid={host} />
-      <div className="flex flex-row items-center justify-between">
-        <div className="flex flex-row items-center justify-between gap-2 mt-4">
-          <ToggleLiveButton {...{ paused, setPaused }} />
-          <KeyVal k="module" val={module} />
-          <KeyVal k="logset" val={logset} />
-        </div>
-      </div>
-      {fields ? (
-        <LogLines fields={fields} lines={cache} />
-      ) : (
-        <>
-          <Popout note>
-            We were unable to parse this log entry into fields, so we show the raw data
-          </Popout>
-          {cache.map((line) => (
-            <LogLine key={line} data={line} />
-          ))}
-        </>
-      )}
-    </>
-  )
+    : <EchartWrapper {...{ data, host, module, metricset, paused, setPaused, hostname, show }} />
 }
 
-async function runShowLogsApiCall(api, host, module, logset) {
+async function runShowMetricsApiCall(api, host, module, metricset, hostname) {
   const data = {}
-  let result = await api.getCacheKey(`log|${host}|${module}|${logset}`)
+  let result = await api.getCacheKey(`metric|${host}|${module}|${metricset}`)
   if (Array.isArray(result) && result[1] === 200) data.cache = result[0].value
   result = await api.getInventoryHost(host)
   if (Array.isArray(result) && result[1] === 200) data.inventory = result[0]
@@ -314,57 +309,95 @@ async function runShowLogsApiCall(api, host, module, logset) {
   return data
 }
 
-const LogLine = ({ data }) => {
-  let parsed
-  try {
-    parsed = JSON.parse(`${data}`)
-  } catch (err) {
-    parsed = `${data}`
+const EchartWrapper = ({ data, host, module, metricset, paused, setPaused, hostname, show=true }) => {
+  const [enabled, setEnabled] = useState(show)
+
+  // We are memoizing option to avoid re-renders
+  const option = useMemo(() => transformMetrics({
+    host,
+    module,
+    metricset,
+    data,
+    templates: chartTemplates(data)
+  }), [data])
+
+  const toggleChart = (id) => {
+    const newEnabled = enabled === true ? {} : {...enabled}
+    if (newEnabled[id]) delete newEnabled[id]
+    else newEnabled[id] = true
+
+    setEnabled(newEnabled)
   }
 
-  return <pre>{JSON.stringify(parsed, null, 2)}</pre>
-}
-
-const LogLines = ({ fields, lines }) => {
-  // State
-  const [order, setOrder] = useState('name')
-  const [desc, setDesc] = useState(false)
-
-  const sorted = orderBy(
-    lines.map((line) => JSON.parse(line)),
-    [order],
-    [desc ? 'desc' : 'asc']
-  )
+  const isEnabled = (option, i) => (enabled === true || (enabled && (enabled[i] || enabled[option?.id])))
+    ? true
+    : false
 
   return (
-    <table className="table table-auto">
-      <thead>
-        <tr>
-          {fields.map((field) => (
-            <th key={field}>
-              <button
-                className="btn btn-link capitalize px-0 underline hover:decoration-4 decoration-2"
-                onClick={() => (order === field ? setDesc(!desc) : setOrder(field))}
-              >
-                {field}{' '}
-                <RightIcon
-                  stroke={3}
-                  className={`w-4 h-4 ${desc ? '-' : ''}rotate-90 ${order === field ? '' : 'opacity-0'}`}
-                />
-              </button>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((entry, i) => (
-          <tr key={i}>
-            {fields.map((field) => (
-              <td key={field}>{field === 'time' ? timeAgo(entry[field]) : entry[field]}</td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-row flex-wrap items-center justify-center gap-1 mb-4">
+        <ToggleLiveButton {...{ paused, setPaused }} />
+        <KeyVal k="module" val={module} />
+        <KeyVal k="metricset" val={metricset} />
+        {hostname
+          ? <KeyVal k="hostname" val={hostname} />
+          : <KeyVal k="host" val={host} />
+        }
+        {Array.isArray(option) && typeof show !== 'object'
+          ? option.map((opt, i) => opt ? <KeyVal
+              key={i}
+              k={isEnabled(opt, i) ? "shown" : "hidden"}
+              val={opt.title.text}
+              color={isEnabled(opt, i) ? "success" : "error"}
+              onClick={() => toggleChart(option.id ? option.id : i)}
+            /> : null
+          )
+          : null
+        }
+      </div>
+      {Array.isArray(option)
+        ? option.map((opt, i) => (!opt || !isEnabled(opt, i))
+          ? null
+          : <SingleEchart key={i} option={opt} href={`/boards/metrics/${host}/${module}/${metricset}/${opt.id || i}`}/>
+        )
+        : <SingleEchart option={option} href={`/boards/metrics/${host}/${module}/${metricset}/${option.id || i}`}/>
+      }
+    </div>
   )
 }
+
+const SingleEchart = ({ option, href=false }) => {
+  if (href && option.toolbox?.feature) {
+    option.toolbox.feature.myPermalink = {
+      show: true,
+      title: "Permalink to this chart",
+      icon: 'path://M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z',
+
+      onclick: () => window.location.href = href
+    }
+  }
+
+  return <Echart option={option} />
+}
+
+const MultiEchart = ({ options, href }) => options.map((option, i) => <SingleEchart option={option} href={href} key={i} />)
+
+/**
+ * A helper method to parse a list of Redis/ValKey metrics
+ *
+ * @param {array} cache - The data from the cache
+ * @return {object} data - The same data parsed
+ */
+function parseCachedMetrics (metrics) {
+  if (!metrics) return false
+  const data = []
+  for (const i in metrics) {
+    if (i %2 === 1) data.push({
+      timestamp: Number(metrics[i]),
+      data: JSON.parse(metrics[i-1])
+    })
+  }
+
+  return data
+}
+

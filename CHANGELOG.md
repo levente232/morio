@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- [api] Return host name/fqdn when loading inventory data
+- [ui] Group operating systems on inventory pages
+- [ui] Improvement to inventory pages
+
+### Fixed
+
+- [ui] Add missing inventory/oss icon to main navigation menu
+- [tap] Fix an issue with metrics caching expiry
+
 ## [0.6.1] - 2025-01-28
 
 ### Added
