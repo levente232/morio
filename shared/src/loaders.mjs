@@ -8,7 +8,6 @@ import { rm, mkdir, readFile, writeFile, globDir } from './fs.mjs'
 import { cloneAsPojo, get, set, setIfUnset, reverseString } from './utils.mjs'
 import merge from 'lodash/merge.js'
 import unset from 'lodash/unset.js'
-import mustache from 'mustache'
 
 /*
  * A collection of utils to load various files
@@ -583,10 +582,10 @@ export async function loadStreamProcessors(settings, log) {
                   settings.tap[processor].modules[mod]
                 )
               } else {
-              /*
-               * Or is it a stream processor itself?
-               * (these should always have settings)
-               */
+                /*
+                 * Or is it a stream processor itself?
+                 * (these should always have settings)
+                 */
                 setIfUnset(settings, ['tap', processor], {})
                 settings.tap[processor] = ensureStreamProcessorSettings(
                   load.info?.settings,
@@ -804,14 +803,4 @@ function applyOverlay(settings, overlay = {}) {
   }
 
   return settings
-}
-
-export function extractTemplateVariables(template) {
-  const vars = []
-  for (const chunk of mustache.parse(template)) {
-    if (chunk[0] === '&' && !chunk[1].includes(' ')) vars.push(chunk[1])
-    else if (chunk[0] === 'name') vars.push(chunk[1])
-  }
-
-  return vars
 }
