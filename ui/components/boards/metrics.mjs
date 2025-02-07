@@ -1,5 +1,5 @@
 // Dependencies
-import { formatBytes, timeAgo } from 'lib/utils.mjs'
+import { formatBytes, timeAgo, parseJson } from 'lib/utils.mjs'
 import orderBy from 'lodash/orderBy.js'
 import { chartTemplates } from './chart-templates.mjs'
 import { linkClasses } from 'components/link.mjs'
@@ -62,9 +62,16 @@ export const MetricsTable = ({ cacheKey = 'metrics' }) => {
 
   // Only keep what is in the cache, but use the inventory data
   const hosts = {}
-  for (const id of cache) {
-    if (inventory[id]) hosts[id] = inventory[id]
-    else hosts[id] = unknownHost(id)
+  for (const i in cache) {
+    /*
+     * This is a zset with scores
+     * So we ignore all odd indexes
+     */
+    if (i % 2 == 0) {
+      const id = cache[i]
+      if (inventory[id]) hosts[id] = inventory[id]
+      else hosts[id] = unknownHost(id)
+    }
   }
   const sorted = orderBy(hosts, [order], [desc ? 'desc' : 'asc'])
 
@@ -184,11 +191,11 @@ export const HostMetricsTable = ({ host, module = false }) => {
   return (
     <>
       <Host uuid={host} />
-      <table className="table table-auto">
+      <table>
         <thead>
           <tr>
             {cols.map((field) => (
-              <th key={field}>
+              <th key={field} className="text-left">
                 <button
                   className={`btn btn-link capitalize px-0 ${linkClasses}`}
                   onClick={() => (order === field ? setDesc(!desc) : setOrder(field))}
@@ -207,13 +214,13 @@ export const HostMetricsTable = ({ host, module = false }) => {
           {sorted.map((entry) => (
             <tr key={entry.lolset + entry.host + entry.module}>
               {module ? null : (
-                <td className="">
+                <td className="py-0.5 pr-4 font-mono text-sm">
                   <PageLink href={`/boards/metrics/${host}/${entry.module}/`}>
                     {entry.module}
                   </PageLink>
                 </td>
               )}
-              <td className="">
+              <td className="py-0.5 font-mono text-sm">
                 <MorioMetricset
                   name={entry.metricset}
                   href={`/boards/metrics/${host}/${entry.module}/${entry.metricset}`}
@@ -392,7 +399,7 @@ const EchartWrapper = ({
   )
 }
 
-const SingleEchart = ({ option, href = false }) => {
+export const SingleEchart = ({ option, href = false }) => {
   if (href && option.toolbox?.feature) {
     option.toolbox.feature.myPermalink = {
       show: true,
@@ -412,16 +419,14 @@ const SingleEchart = ({ option, href = false }) => {
  * @param {array} cache - The data from the cache
  * @return {object} data - The same data parsed
  */
-function parseCachedMetrics(metrics) {
-  if (!metrics) return false
-  const data = []
-  for (const i in metrics) {
-    if (i % 2 === 1)
-      data.push({
-        timestamp: Number(metrics[i]),
-        data: JSON.parse(metrics[i - 1]),
-      })
-  }
+export function parseCachedMetrics(data) {
+  if (Array.isArray(data))
+    return orderBy(
+      data.map((entry) => parseJson(entry)),
+      'timestamp',
+      'ASC'
+    )
 
-  return data
+  console.log('Metrics data was a not an array. This is unexpected')
+  return []
 }
