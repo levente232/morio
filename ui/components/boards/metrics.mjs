@@ -1,5 +1,5 @@
 // Dependencies
-import { formatBytes, timeAgo, parseJson } from 'lib/utils.mjs'
+import { cloneAsPojo, formatBytes, timeAgo, parseJson } from 'lib/utils.mjs'
 import orderBy from 'lodash/orderBy.js'
 import { chartTemplates } from './chart-templates.mjs'
 import { linkClasses } from 'components/link.mjs'
@@ -13,14 +13,15 @@ import { PageLink } from 'components/link.mjs'
 import { ReloadDataButton } from 'components/button.mjs'
 import { Loading } from 'components/animations.mjs'
 import { Uuid } from 'components/uuid.mjs'
-import { Host } from 'components/inventory/host.mjs'
+import { HostSummary } from 'components/inventory/host.mjs'
 import { KeyVal } from 'components/keyval.mjs'
 import { ToggleLiveButton } from 'components/boards/shared.mjs'
 import { ChartsProvider } from './charts-provider.mjs'
 import { Echart } from 'components/echarts.mjs'
+import { Popout } from 'components/popout.mjs'
 
 /**
- * This compnent renders a table with the host for which we have cached metrics
+ * This component renders a table with the host for which we have cached metrics
  */
 export const MetricsTable = ({ cacheKey = 'metrics' }) => {
   // State
@@ -190,7 +191,7 @@ export const HostMetricsTable = ({ host, module = false }) => {
 
   return (
     <>
-      <Host uuid={host} />
+      <HostSummary uuid={host} />
       <table>
         <thead>
           <tr>
@@ -212,7 +213,7 @@ export const HostMetricsTable = ({ host, module = false }) => {
         </thead>
         <tbody>
           {sorted.map((entry) => (
-            <tr key={entry.lolset + entry.host + entry.module}>
+            <tr key={entry.metricset + entry.host + entry.module}>
               {module ? null : (
                 <td className="py-0.5 pr-4 font-mono text-sm">
                   <PageLink href={`/boards/metrics/${host}/${entry.module}/`}>
@@ -273,8 +274,9 @@ const transformMetrics = ({ host, module, metricset, data, templates }) =>
         data,
         templates,
         clone,
+        formatBytes,
       })
-    : data
+    : { err: 'noTransformAvailable', data }
 
 /**
  * This component renders visualisations for all cached
@@ -298,18 +300,18 @@ const ShowMetricsInner = ({ host, module, metricset, hostname, show }) => {
     refetchIntervalInBackground: false,
   })
 
-  // Defer to chart transformer
-  const data = parseCachedMetrics(cache)
-
   // Don't bother if there's nothing in the cache
-  return !cache || cache.length < 1 ? (
+  if (!cache || cache.length < 1) return (
     <>
       <Loading />
       <p>Nothing in the cache to show you here.</p>
     </>
-  ) : (
-    <EchartWrapper {...{ data, host, module, metricset, paused, setPaused, hostname, show }} />
   )
+
+  // Defer to chart transformer
+  const data = parseCachedMetrics(cache)
+
+  return <EchartWrapper {...{ data, host, module, metricset, paused, setPaused, hostname, show }} />
 }
 
 async function runShowMetricsApiCall(api, host, module, metricset) {
@@ -342,7 +344,7 @@ const EchartWrapper = ({
         module,
         metricset,
         data,
-        templates: chartTemplates(data),
+        templates: cloneAsPojo(chartTemplates),
       }),
     [host, module, metricset, data]
   )
@@ -357,6 +359,15 @@ const EchartWrapper = ({
 
   const isEnabled = (option, i) =>
     enabled === true || (enabled && (enabled[i] || enabled[option?.id])) ? true : false
+
+  if (option.err === 'noTransformAvailable') return (
+    <Popout note>
+      <h5>No visualisations available</h5>
+      <p>No charts are loaded for the <code>{metricset}</code> metricset of the <code>{module}</code> module.</p>
+      <p>If this module provides chart templates, you may need to preseed them.</p>
+    </Popout>
+  )
+
 
   return (
     <div className="flex flex-col gap-4">
@@ -420,6 +431,7 @@ export const SingleEchart = ({ option, href = false }) => {
  * @return {object} data - The same data parsed
  */
 export function parseCachedMetrics(data) {
+  if (!data) return data
   if (Array.isArray(data))
     return orderBy(
       data.map((entry) => parseJson(entry)),
@@ -427,6 +439,6 @@ export function parseCachedMetrics(data) {
       'ASC'
     )
 
-  console.log('Metrics data was a not an array. This is unexpected')
+  console.log('Metrics data was not an array. This is unexpected', data)
   return []
 }
