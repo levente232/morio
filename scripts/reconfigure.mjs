@@ -40,13 +40,13 @@ const presetGetters = {
  * An object to mock the production logger
  */
 const logger = {
-  trace: (...data) => console.log(...data),
-  debug: (...data) => console.log(...data),
-  info: (...data) => console.log(...data),
-  warn: (...data) => console.log(...data),
-  error: (...data) => console.log(...data),
-  fatal: (...data) => console.log(...data),
-  silent: (...data) => console.log(...data),
+  trace: (...data) => console.log('TRACE:', ...data),
+  debug: (...data) => console.log('DEBUG:', ...data),
+  info: (...data) => console.log('INFO:', ...data),
+  warn: (...data) => console.log('WARN:', ...data),
+  error: (...data) => console.log('ERROR:', ...data),
+  fatal: (...data) => console.log('FATAL:', ...data),
+  silent: (...data) => console.log('SILENT:', ...data),
 }
 
 /*
@@ -129,12 +129,19 @@ const preApiTest = `
 #   - The morionet network is available so we can attach to it
 #   - The reporter inside our test container has permissions to write coverage output
 #
+echo "INFO: Removing any existing morio-api container"
 docker rm -f morio-api
+
+echo "INFO: Creating morionet network"
 docker network create morionet
+
+echo "INFO: Cleaning up API coverage data"
 sudo rm -rf ./api/coverage/*
 sudo mkdir -p ./api/coverage/tmp
 sudo chown -R 2112:2112 ./api/coverage
 sudo chmod -R 755 ./api/coverage  # Allow read/write/execute for the user
+
+echo "INFO: Setting up API test logs"
 sudo touch ./local/api_tests.json
 sudo chown 2112:2112 ./local/api_tests.json
 sudo chmod 644 ./local/api_tests.json
@@ -143,18 +150,19 @@ sudo chown 2112:2112 ./local/api_test_logs.ndjson
 sudo chmod 644 ./local/api_test_logs.ndjson
 
 # Start an ephemeral LDAP instance so we can test IDP/LDAP
-echo "Starting ephemeral LDAP server"
+echo "INFO: Starting ephemeral LDAP server"
 ./api/tests/start-ldap-server.sh
 `
 const postApiTest = `
 # Stop an ephemeral LDAP instance
-echo "Stopping ephemeral LDAP server"
+echo "INFO: Stopping ephemeral LDAP server"
 ./api/tests/stop-ldap-server.sh
 `
 
 const coreWebConfig = `
 
 # Copy the webroot and config into the correct location for dev
+echo "INFO: Copying webroot and config files into correct location for dev"
 sudo mkdir -p ${MORIO_GIT_ROOT}/data/config/web
 sudo cp -R ${MORIO_GIT_ROOT}/moriod/etc/morio/moriod/web  ${MORIO_GIT_ROOT}/data/config
 sudo mkdir -p ${MORIO_GIT_ROOT}/data/data
@@ -165,7 +173,7 @@ sudo cp -R ${MORIO_GIT_ROOT}/moriod/var/lib/morio/moriod/webroot ${MORIO_GIT_ROO
 const testFqdnCheck = `
 if [ -z "\${MORIO_FQDN}" ]; then
   echo ""
-  echo "Error: MORIO_FQDN is not set"
+  echo "ERROR: MORIO_FQDN is not set"
   echo "To be able to run the unit tests, we need to know the FQDN for the Morio collector."
   echo "Please set the MORIO_FQDN variable in your local environment. Eg:"
   echo "export MORIO_FQDN=10.0.0.1.nip.io"
@@ -185,15 +193,25 @@ ${name === 'api' && env === 'test' ? testFqdnCheck : ''}
 ${name === 'core' && env === 'dev' ? coreWebConfig : ''}
 ${name === 'api' ? preApiTest : ''}
 
+echo "INFO: Running Docker container for ${name} in ${env} environment"
 docker run ${cliOptions(name, env)}
 ${name === 'api' ? postApiTest : ''}
 `
+
+console.log('INFO: Generating run container scripts for dev, test, and prod environments')
+
 for (const env of ['dev', 'test', 'prod']) {
+  console.log(`INFO: Writing run-${env}-container.sh for core`)
   await writeFile(`core/run-${env}-container.sh`, script('core', env), false, 0o755)
 }
+
+console.log('INFO: Writing run-test-container.sh for api')
 await writeFile(`api/run-test-container.sh`, script('api', 'test'), false, 0o755)
 
+console.log('INFO: Writing VERSION file')
 await writeFile(`VERSION`, pkg.version)
+
+console.log('INFO: Generating pull-oci-images.sh script')
 
 /*
  * also generate the pull-oci script
@@ -208,3 +226,5 @@ await writeFile(
   false,
   0o755
 )
+
+console.log('INFO: Scripts generated successfully')
