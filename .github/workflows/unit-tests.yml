@@ -57,3 +57,6 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
           CODECOV_SLUG: ${{ github.repository }}
         run: npm run test:api
+
+      - name: Run destroy
+        run: npm run destroy
