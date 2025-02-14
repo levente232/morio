@@ -50,7 +50,7 @@ LATEST_COVERAGE_FILE=$(ls -t ./coverage/tmp/*.json | head -n 1)
 
 if [ -f "$LATEST_COVERAGE_FILE" ]; then
   echo "Uploading coverage report: $LATEST_COVERAGE_FILE"
-  /usr/local/bin/codecov --file="$LATEST_COVERAGE_FILE" --token="$CODECOV_TOKEN" --slug="$CODECOV_SLUG" --sha="$GIT_COMMIT_SHA" --trace-warnings
+  /usr/local/bin/codecov --file="$LATEST_COVERAGE_FILE" --token="$CODECOV_TOKEN" --slug="levente232/morio" --sha="$GIT_COMMIT_SHA" --trace-warnings
 else
   echo "Error: No coverage report found"
   exit 1
