@@ -116,7 +116,6 @@ ${(config[name][env].container?.labels || []).map((lab) => `  -l "${lab.split('`
   -e MORIO_DOCKER_LOG_DRIVER=${MORIO_DOCKER_LOG_DRIVER} \\
   -e GIT_COMMIT_SHA=${process.env['GIT_COMMIT_SHA']} \\
   -e GITHUB_PR_NUMBER=${process.env['GITHUB_PR_NUMBER']} \\
-  -e CODECOV_TOKEN=${process.env['CODECOV_TOKEN']} \\
   -e MORIO_FQDN=${process.env['MORIO_FQDN']} \\
   -e NODE_ENV=${presetGetters[env]('NODE_ENV')} \\
 ${MORIO_DOCKER_ADD_HOST ? '-e MORIO_DOCKER_ADD_HOST="' + MORIO_DOCKER_ADD_HOST + '"' : ''} \\
