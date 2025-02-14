@@ -96,7 +96,6 @@ const config = {
  */
 const cliOptions = (name, env) => `\\
   ${env === 'test' ? '--interactive --rm' : '-d'} \\
-  --user root \\
   --name=morio-${config[name][env].container.container_name} \\
   --hostname=morio-${config[name][env].container.container_name} \\
   --label morio.service=${name} \\
