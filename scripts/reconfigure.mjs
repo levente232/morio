@@ -94,14 +94,7 @@ const config = {
 /*
  * Generate run files for development
  */
-const cliOptions = (name, env) => {
-  console.log('MORIO_FQDN:', process.env['MORIO_FQDN'])
-  console.log('GIT_COMMIT_SHA:', process.env['GIT_COMMIT_SHA'])
-  console.log('GITHUB_PR_NUMBER:', process.env['GITHUB_PR_NUMBER'])
-  console.log('CODECOV_TOKEN:', process.env['CODECOV_TOKEN'])
-  console.log('CODECOV_SLUG:', process.env['CODECOV_SLUG'])
-
-  return `\\
+const cliOptions = (name, env) => `\\
   ${env === 'test' ? '--interactive --rm' : '-d'} \\
   --user root \\
   --name=morio-${config[name][env].container.container_name} \\
@@ -109,12 +102,13 @@ const cliOptions = (name, env) => {
   --label morio.service=${name} \\
   --log-driver=${MORIO_DOCKER_LOG_DRIVER} \\
   ${MORIO_DOCKER_LOG_DRIVER === 'journald' ? '--log-opt labels=morio.service' : ''}  \\
-  ${MORIO_DOCKER_ADD_HOST ? '--add-host ' + MORIO_DOCKER_ADD_HOST : ''} \\
-  ${name === 'api' ? '  --network morionet' : ''} \\
+${MORIO_DOCKER_ADD_HOST ? '--add-host ' + MORIO_DOCKER_ADD_HOST : ''} \\
+${name === 'api' ? '  --network morionet' : ''} \\
+  --network-alias ${['morio-' + name].concat(config[name][env].container?.aliases || []).join(',')} \\
   ${config[name][env].container.init ? '--init' : ''} \\
-  ${(config[name][env].container?.ports || []).map((port) => `  -p ${port} `).join(' \\\n')} \\
-  ${(config[name][env].container?.volumes || []).map((vol) => `  -v ${vol} `).join(' \\\n')} \\
-  ${(config[name][env].container?.labels || []).map((lab) => `  -l "${lab.split('`').join('\\`')}" `).join(' \\\n')} \\
+${(config[name][env].container?.ports || []).map((port) => `  -p ${port} `).join(' \\\n')} \\
+${(config[name][env].container?.volumes || []).map((vol) => `  -v ${vol} `).join(' \\\n')} \\
+${(config[name][env].container?.labels || []).map((lab) => `  -l "${lab.split('`').join('\\`')}" `).join(' \\\n')} \\
   -e MORIO_DOCKER_SOCKET=${presetGetters[env]('MORIO_DOCKER_SOCKET')} \\
   -e MORIO_CONFIG_ROOT=${presetGetters[env]('MORIO_CONFIG_ROOT')} \\
   -e MORIO_DATA_ROOT=${presetGetters[env]('MORIO_DATA_ROOT')} \\
@@ -127,11 +121,11 @@ const cliOptions = (name, env) => {
   -e CODECOV_TOKEN=${process.env['CODECOV_TOKEN']} \\
   -e CODECOV_SLUG=${process.env['CODECOV_SLUG']} \\
   -e NODE_ENV=${presetGetters[env]('NODE_ENV')} \\
-  ${MORIO_DOCKER_ADD_HOST ? '-e MORIO_DOCKER_ADD_HOST="' + MORIO_DOCKER_ADD_HOST + '"' : ''} \\
-  ${env !== 'prod' ? '-e MORIO_GIT_ROOT=' + MORIO_GIT_ROOT + ' \\\n  ' : ''} 
-  ${config[name][env].container.image}:${env === 'prod' ? 'v' + pkg.version : 'dev'} ${env === 'test' ? 'bash /morio/' + name + '/tests/run-unit-tests.sh' : ''}
+${MORIO_DOCKER_ADD_HOST ? '-e MORIO_DOCKER_ADD_HOST="' + MORIO_DOCKER_ADD_HOST + '"' : ''} \\
+  ${
+    env !== 'prod' ? '-e MORIO_GIT_ROOT=' + MORIO_GIT_ROOT + ' \\\n  ' : ''
+  }${config[name][env].container.image}:${env === 'prod' ? 'v' + pkg.version : 'dev'} ${env === 'test' ? 'bash /morio/' + name + '/tests/run-unit-tests.sh' : ''}
 `
-}
 
 const preApiTest = `
 #
@@ -209,20 +203,14 @@ docker run ${cliOptions(name, env)}
 ${name === 'api' ? postApiTest : ''}
 `
 
-console.log('INFO: Generating run container scripts for dev, test, and prod environments')
-
 for (const env of ['dev', 'test', 'prod']) {
   console.log(`INFO: Writing run-${env}-container.sh for core`)
   await writeFile(`core/run-${env}-container.sh`, script('core', env), false, 0o755)
 }
 
-console.log('INFO: Writing run-test-container.sh for api')
 await writeFile(`api/run-test-container.sh`, script('api', 'test'), false, 0o755)
 
-console.log('INFO: Writing VERSION file')
 await writeFile(`VERSION`, pkg.version)
-
-console.log('INFO: Generating pull-oci-images.sh script')
 
 /*
  * also generate the pull-oci script
@@ -237,5 +225,3 @@ await writeFile(
   false,
   0o755
 )
-
-console.log('INFO: Scripts generated successfully')
