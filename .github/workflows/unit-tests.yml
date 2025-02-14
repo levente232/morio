@@ -40,6 +40,7 @@ jobs:
           GIT_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.id }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          CODECOV_SLUG: ${{ github.repository }}
         run: npm run reconfigure
 
       - name: Build docker images for local development
