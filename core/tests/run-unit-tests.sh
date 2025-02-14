@@ -35,6 +35,8 @@ kill -1 %1
 
 echo "commit: $GIT_COMMIT_SHA"
 echo "pr: $GITHUB_PR_NUMBER"
+echo "token: $CODECOV_TOKEN"
+echo "slug: $CODECOV_SLUG"
 # Copy the coverage report if an artificate location is set
 if [ -n "$MORIO_ARTIFACT_FOLDER" ]; then
   chmod +r ./coverage/*.json
