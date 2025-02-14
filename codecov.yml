@@ -1,0 +1,17 @@
+version: 2.0
+
+coverage:
+  paths:
+    - ./core/coverage/*.json
+    - ./api/coverage/tmp/*.json
+  merge:
+    - ./core/coverage/*.json
+    - ./api/coverage/tmp/*.json
+  flags:
+    - core
+    - api
+  comment: false
+
+slug: levente232/morio
+
+token: ${CODECOV_TOKEN}
