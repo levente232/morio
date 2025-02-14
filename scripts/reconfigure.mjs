@@ -95,11 +95,11 @@ const config = {
  * Generate run files for development
  */
 const cliOptions = (name, env) => {
-  const morioFqdn = process.env.MORIO_FQDN || '${{ secrets.MORIO_FQDN }}' // Placeholder for GitHub Secrets
-  const gitCommitSha = process.env.GIT_COMMIT_SHA || '${{ github.event.pull_request.head.sha }}'
-  const githubPrNumber = process.env.GITHUB_PR_NUMBER || '${{ github.event.pull_request.id }}'
-  const codecovToken = process.env.CODECOV_TOKEN || '${{ secrets.CODECOV_TOKEN }}'
-  const codecovSlug = process.env.CODECOV_SLUG || '${{ github.repository }}'
+  const morioFqdn = process.env.MORIO_FQDN || '"${{ secrets.MORIO_FQDN }}"' // Placeholder for GitHub Secrets
+  const gitCommitSha = process.env.GIT_COMMIT_SHA || '"${{ github.event.pull_request.head.sha }}"'
+  const githubPrNumber = process.env.GITHUB_PR_NUMBER || '"${{ github.event.pull_request.id }}"'
+  const codecovToken = process.env.CODECOV_TOKEN || '"${{ secrets.CODECOV_TOKEN }}"'
+  const codecovSlug = process.env.CODECOV_SLUG || '"${{ github.repository }}"'
 
   console.log('MORIO_FQDN:', morioFqdn)
   console.log('GIT_COMMIT_SHA:', gitCommitSha)
