@@ -55,6 +55,3 @@ jobs:
         env:
           MORIO_FQDN: runner.morio.it
         run: npm run test:api
-
-      - name: Remove cached dir
-        run: npm run erase

@@ -77,7 +77,6 @@
     "ci:spellcheck": "./scripts/ci-spellcheck-docs.sh",
     "docker:build.moriod.deb": "./scripts/docker-build-moriod-deb.sh",
     "docker:build.moriod.rpm": "./scripts/docker-build-moriod-rpm.sh",
-    "erase": "./scripts/erase-only.sh",
     "destroy": "./scripts/destroy.sh",
     "dev": "./core/run-dev-container.sh",
     "e2e:ephemeral": "cd ui && npm run test:ephemeral && cd -",

@@ -1,1 +1,0 @@
-sudo rm -rf ${MORIO_GIT_ROOT}/data/* &> /dev/null
