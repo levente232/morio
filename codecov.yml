@@ -1,21 +1,6 @@
 coverage:
   status:
-    project: true
-    patch: true
-  range: "coveralls"
-
-coverage:
-  diff:
-    threshold: 0
-  all:
-    threshold: 80
-
-upload:
-  always_upload: true
-  upload_empty_reports: false
-  disable_prs: false
-
-coverage:
-  include:
-    - "api/src/**"
-    - "core/src/**"
+    project:
+      default:
+        target: 100%
+        threshold: 1%
