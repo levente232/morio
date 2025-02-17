@@ -27,8 +27,8 @@ docker rm -fv \
 # echo "Removing Docker network..."
 # docker network rm morionet || true
 
-echo "Cleaning up data folder..."
-sudo rm -rf ${MORIO_GIT_ROOT}/data/* &> /dev/null || true
+# echo "Cleaning up data folder..."
+# sudo rm -rf ${MORIO_GIT_ROOT}/data/* &> /dev/null || true
 
 # Also remove auto-generated files
 echo "Removing auto-generated files..."
