@@ -24,7 +24,7 @@ jobs:
       # Remove the data directory before checking out the code
       - name: Remove data directory if it exists
         run: |
-          sudo rm -rf ./data || echo "No data directory to remove"
+          echo "${{ secrets.SUDO_PASSWORD }}" | sudo -S rm -rf ./data || echo "No data directory to remove"
 
       - name: Checkout PR Code
         uses: actions/checkout@v4
