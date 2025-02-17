@@ -24,8 +24,8 @@ docker rm -fv \
   morio-cache \
   2> /dev/null || true
 
-echo "Removing Docker network..."
-docker network rm morionet || true
+# echo "Removing Docker network..."
+# docker network rm morionet || true
 
 echo "Cleaning up data folder..."
 sudo rm -rf ${MORIO_GIT_ROOT}/data/* &> /dev/null || true
