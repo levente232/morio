@@ -59,3 +59,4 @@ fi
 # Clean up the coverage directory
 rm -rf ./coverage/tmp/*
 rm -rf ./coverage/*
+rm -rf ../../data/*
