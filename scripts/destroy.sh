@@ -18,7 +18,7 @@ docker rm -fv \
   morio-tap \
   morio-cache \
   2> /dev/null
-docker network rm morionet
+docker network rm morionet || true
 sudo rm -rf ${MORIO_GIT_ROOT}/data/* &> /dev/null || true
 # Also remove auto-generated files
 rm -f ${MORIO_GIT_ROOT}/clients/linux/etc/morio/audit/config-template.yml &> /dev/null
