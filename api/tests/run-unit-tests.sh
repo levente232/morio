@@ -1,7 +1,5 @@
 #!/bin/bash
 #
-set -e
-
 if [ -z "${MORIO_FQDN}" ]; then
   echo ""
   echo "Error: MORIO_FQDN is not set"

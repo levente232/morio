@@ -1,6 +1,4 @@
 #!/bin/bash
-set -e
-
 # Enter monorepo folder
 cd /morio/core
 
