@@ -30,12 +30,20 @@ node \
   --test-concurrency=1 \
   --test
 
+TEST_EXIT_CODE=$?
+
 # Stop core container
 kill -1 %1
 
 echo "commit: $GIT_COMMIT_SHA"
 echo "pr: $GITHUB_PR_NUMBER"
 echo "token: $CODECOV_TOKEN"
+
+# If tests failed, propagate failure
+if [ $TEST_EXIT_CODE -ne 0 ]; then
+  echo "Tests failed. Exiting with error."
+  exit $TEST_EXIT_CODE
+fi
 
 # Copy the coverage report if an artificate location is set
 if [ -n "$MORIO_ARTIFACT_FOLDER" ]; then
@@ -54,11 +62,11 @@ LATEST_COVERAGE_FILE=$(ls -t ./coverage/*.json | head -n 1)
 
 if [ -f "$LATEST_COVERAGE_FILE" ]; then
   echo "Uploading coverage report: $LATEST_COVERAGE_FILE"
-  /usr/local/bin/codecov --file="$LATEST_COVERAGE_FILE" --token="$CODECOV_TOKEN" --slug="certeu/morio" --sha="$GIT_COMMIT_SHA" --trace-warnings
+  /usr/local/bin/codecov --file="$LATEST_COVERAGE_FILE" --token="$CODECOV_TOKEN" --slug="$CODECOV_SLUG" --sha="$GIT_COMMIT_SHA" --trace-warnings
 else
   echo "Error: No coverage report found"
   exit 1
 fi
 
 # Clean up the coverage directory
-rm -rf ./coverage
+rm -rf ./coverage/*
